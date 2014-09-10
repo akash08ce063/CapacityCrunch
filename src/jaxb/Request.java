@@ -5,6 +5,7 @@
 package jaxb;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 /**
  *
  * @author Ricardo KAKA
@@ -19,9 +20,15 @@ public class Request {
     int allocatedBandwidth;
     int maxBandwidth;
     int minBandwidth;
+    int crunchCount;
+    int crunchingRatio;
+    HashMap crunchTime;
+    
+    
     Request(){
         source ="";
         target = "";
         path = new ArrayList();
+        crunchTime= new HashMap();
     }
 }

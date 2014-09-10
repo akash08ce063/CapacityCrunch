@@ -38,6 +38,7 @@ public class link {
         this.routingCost = routingCost;
     }
     double capacity ;
+    double availableCapacity;
     String target;
     double routingCost;
     additionaModule AdditionalModules;

@@ -15,14 +15,15 @@ import java.util.Random;
 // Traffic generation 
 public class Distribution {
     
-    Distribution(){
+    public Distribution(){
     
     }
     
     public double exponentialDistribution(double mean){
         Random rand = new Random();  
         
-        return -Math.log(1.0 - rand.nextDouble()) / mean ;
+        //return rand.nextDouble();
+        return Math.log(1.0 - rand.nextDouble()) * -mean ;
     
     }
     
@@ -44,4 +45,8 @@ public class Distribution {
         int i = r.nextInt(range);
         return i;
     }
+    
+    
+    
+    
 }
