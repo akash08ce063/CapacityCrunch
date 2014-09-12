@@ -4,6 +4,10 @@
  */
 package jaxb;
 
+import ilog.concert.IloException;
+import ilog.concert.IloNumExpr;
+import ilog.concert.IloNumVar;
+import ilog.cplex.IloCplex;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -188,25 +192,12 @@ public class JAXB extends TimerTask {
         
      while(true){
          
-         /*
-            long startingTime = System.currentTimeMillis() ;
-           
-          
-          */
          
-         
-         double nextTime = (double) expDis.sample();
-           
-         
-        
-        long startingTime = System.currentTimeMillis() ;
-        
-        System.out.println("The size of Queue" + parsing.eventQueue.size());
-        
-        
-        
-           
-           Request request = new Request();
+        // double nextTime = (double) expDis.sample();
+         double nextTime  = 1;
+         long startingTime = System.currentTimeMillis() ;
+         System.out.println("The size of Queue" + parsing.eventQueue.size());
+         Request request = new Request();
            //listofNode.get(0)
            
            
@@ -215,11 +206,13 @@ public class JAXB extends TimerTask {
              
             System.out.println("Source " + request.source + "Target "+ request.target);
           
+            
            request.allocatedBandwidth = distribution.possionDistribution(30000);
-           request.holdingTime = 50;
+           request.capacity = request.allocatedBandwidth ; 
+           request.holdingTime = 200;
           // request.holdingTime = distribution.uniformdistibution(50);
-           request.maxBandwidth = request.allocatedBandwidth + 15;
-           request.minBandwidth = request.allocatedBandwidth - 15;
+           request.maxBandwidth = request.allocatedBandwidth + 15.0;
+           request.minBandwidth = request.allocatedBandwidth - 15.0;
            request.crunchingRatio = distribution.possionDistribution(50);
          //  System.out.println("allocatedBandwidth"+distribution.possionDistribution(6000));
            HashMap shortestPathMap = spath.shortestPathFindingHandler(parsing, request.source,request.target , request.allocatedBandwidth);
@@ -232,17 +225,16 @@ public class JAXB extends TimerTask {
            }else{
                if(spath.crunchingNeeded){
                    // crunching needed
-                   
-                   System.out.println("Crunching needed");
-                   
+                   System.out.println("--------------------------------Crunching needed -----------------------------------------");
+                   crunchRequests(shortestPathMap,request,request.allocatedBandwidth);
                }else{
                    // Assing the request
-                   
                    System.out.println("Assigned the request");
-                  // System.out.println(shortestPathMap);
-                   
+               //    provisionRequest(request,parsing);
                    
                }
+               
+               provisionRequest(request,parsing);
                
            }
           
@@ -331,9 +323,228 @@ public class JAXB extends TimerTask {
     }
     
     
-    public static void crunchRequests(){
+    public static void crunchRequests(HashMap crunchablePath, Request request, double requiredBandwidth){
         // Crunching the request according to cplex code.
+           ArrayList<link> crunchLink = new ArrayList<link>(); 
+           HashMap<Request,link> crunchRequest = new HashMap<Request,link>();
+           
+           String previous =  (String) crunchablePath.get(request.target);
+           request.path.add(request.target);
+           request.path.add(previous);
+           
+           
+           
+           while(previous != request.source){
+              previous =  (String) crunchablePath.get(previous);
+              request.path.add(previous);
+           }
         
+           Collections.reverse(request.path);
+           
+          
+           
+           
+           
+           for(int i = 0 ; i < request.path.size()-1 ;i++){
+              GraphNode sourceNode = parsing.nodes.node.get(request.path.get(i));
+              link sourceTargetLink = (link) sourceNode.nodeLink.get(parsing.nodes.node.get(request.path.get(i+1)));
+              if(sourceTargetLink.availableCapacity - requiredBandwidth < 0){
+                  crunchLink.add(sourceTargetLink);
+              }
+           }
+        
+           
+           
+           for(int i = 0 ; i < crunchLink.size() ; i++){
+              link crunchlink = crunchLink.get(i);
+              System.out.println("Passing Request Size - " + crunchlink.passingRequest.size());
+              for(int j = 0 ; j < crunchlink.passingRequest.size() ; j++){
+                  crunchRequest.put(crunchlink.passingRequest.get(j), crunchlink);
+                  //crunchRequest.add(crunchlink.passingRequest.get(j));
+              }
+           }
+        
+        
+        
+         try {
+             
+             
+             
+            Request requestCrunch[] = new Request[crunchRequest.size()];
+          
+            Iterator iterator = crunchRequest.keySet().iterator() ;
+            int index = 0;
+            while(iterator.hasNext()){
+                requestCrunch[index] =  (Request)iterator.next();
+                index++;
+            }
+            
+            
+            double lb[] = new double[requestCrunch.length];
+            double ub[] = new double[requestCrunch.length];
+            double xPast[] = new double[requestCrunch.length];
+            double bMax[] = new double[requestCrunch.length];
+            double bMin[] = new double[requestCrunch.length];
+            double RHT[] = new double[requestCrunch.length];
+            double HT[] = new double[requestCrunch.length];
+            
+            for(int i = 0 ; i < requestCrunch.length ; i++){
+                Request tempRequest = requestCrunch[i];
+                lb[i] = 0.0;
+                ub[i] = Double.MAX_VALUE;
+                
+                ///////////////////////////////
+                xPast[i] = tempRequest.xPast;
+               /////////////////
+                
+                bMax[i] = tempRequest.maxBandwidth;
+                bMin[i] = tempRequest.minBandwidth;
+                HT[i] = tempRequest.holdingTime;
+                RHT[i] = tempRequest.holdingTime - (tempRequest.startingTime - System.currentTimeMillis()) ;
+                
+            }
+            
+            
+            
+            IloCplex cplex = new IloCplex();  
+            //double lb[] = {0.0,0.0,0.0};
+            //double ub[] = {Double.MAX_VALUE,Double.MAX_VALUE,Double.MAX_VALUE};
+            IloNumVar[] x = cplex.numVarArray(requestCrunch.length, lb, ub);
+            IloNumVar[] y = cplex.numVarArray(1, 0.0, Double.MAX_VALUE);
+            //double xPast[] = new double[]{15,15,15};
+            //double bMax[] = new double[]{30,30,30};
+            //double bMin[] = new double[]{10,10,10};
+            //double RHT[] = new double[]{16,16,16};
+            //double HT[] = new double[]{30,30,30};
+            
+            
+            
+            
+            IloNumExpr ines[] = new IloNumExpr[xPast.length]; 
+            ArrayList<IloNumExpr> inesArray = new ArrayList<IloNumExpr>();
+           // double linkCapacity = 81.0;
+            
+              IloNumExpr expr2 = null ;
+              IloNumExpr expr5 = null ;
+         
+            cplex.addMinimize(y[0]);
+            int length = (xPast.length - 1)/2;  
+            double firstPartEq = 0.0;
+            
+            for(int i = 0 ; i < x.length ; i++){
+                cplex.addGe(y[0],cplex.sum((xPast[i] * (HT[i]-RHT[i])),cplex.prod(RHT[i], x[i])));
+            }
+            
+            
+            
+            for(int i = 0 ; i <= length ; i++){
+                if(i !=0 ){
+                    if((i*2+1) > xPast.length-1){
+            //            expr2 = cplex.sum((xPast[i*2] * (HT[i*2]-RHT[i*2])),cplex.prod(RHT[i*2], x[i*2]));
+                        expr5 = cplex.sum(expr5,cplex.prod(-RHT[i*2], x[i*2]));
+                       
+                    }
+                    else{
+                        expr5 = cplex.sum(expr5,cplex.prod(-RHT[i*2], x[i*2]),cplex.prod(-RHT[(i*2)+1], x[(i*2)+1]));
+                        
+                    }
+                } else{
+                    expr5 = cplex.sum(cplex.prod(-RHT[i], x[i]),cplex.prod(-RHT[i+1], x[i+1]));
+                    
+                }
+            }
+            
+           
+            
+            
+          //  for(int i = 0 ; i < bMax.length ; i++){
+            //    totalBandWidth = totalBandWidth + bMax[i];
+           // }
+            
+            
+           
+            int startIndex = 0;
+            int limitParam = 0;
+            
+            for(int j = 0 ; j < crunchLink.size() ; j++){
+                
+                double totalBandWidth = 0.0;
+                IloNumExpr expr4 = null ;
+                link tempStoreLink = crunchLink.get(j);
+                int numofRequest = tempStoreLink.passingRequest.size() ;
+                int timesLoop =(tempStoreLink.passingRequest.size() -1)  /2;
+                if(j == 0)
+                limitParam = numofRequest-1 ;
+                else
+                limitParam = limitParam +  numofRequest-1 ;    
+                
+                for(int i = startIndex ; i <= startIndex+ timesLoop ; i++){
+                    if(i !=0 ){
+                        if((i*2+1) > limitParam){
+                            expr4 = cplex.sum(expr4,cplex.prod(1.0, x[i*2]));
+                           // firstPartEq = firstPartEq + (xPast[i*2] * (HT[i*2]-RHT[i*2]) );
+                        }
+                        else{
+                            expr4 = cplex.sum(expr4,cplex.prod(1.0, x[i*2]),cplex.prod(1.0, x[(i*2)+1]));
+                           // firstPartEq = firstPartEq + xPast[i*2]*(HT[i*2]-RHT[i*2]) + xPast[(i*2)+1]*(HT[(i*2)+1] - RHT[(i*2)+1]); ;
+                        }
+                    } else{
+                            expr4 = cplex.sum(cplex.prod(1.0, x[i]),cplex.prod(1.0, x[i+1]));
+                           // firstPartEq = xPast[i]*(HT[i]-RHT[i]) + xPast[i+1]*(HT[i+1] - RHT[i+1]);
+                    }
+                }
+                
+                //limitParam = limitParam + numofRequest-1 ;
+                startIndex =startIndex + timesLoop + 1 ;
+                for(int loop = 0 ; loop <numofRequest ; loop++){
+                   totalBandWidth = totalBandWidth + tempStoreLink.passingRequest.get(loop).maxBandwidth;
+                }
+                
+            
+                cplex.addGe( expr4 ,(totalBandWidth - tempStoreLink.capacity));
+           } 
+            
+            
+           for(int i = 0 ; i <x.length ; i++){
+               cplex.addLe(x[i], (bMax[i]-bMin[i]));
+           }
+           
+          
+           for(int i = 0 ; i < x.length ; i++){
+             cplex.addGe(cplex.sum(y[0],cplex.prod(-RHT[i], x[i])), xPast[i]*(HT[i] - RHT[i]));
+           }
+           
+           
+           
+           for(int i = 0 ; i < x.length ; i++){
+               cplex.addGe(x[i],0.0);
+           }
+           
+           
+          cplex.addGe(y[0], 0.0);
+            
+            if(cplex.solve()){
+                cplex.output().println("Soulution status" + cplex.getStatus());
+                cplex.output().println("solution value" + cplex.getObjValue());
+                double value1 [] =cplex.getValues(y);
+                System.out.println(value1[0]);
+                double[] val = cplex.getValues(x);
+              //  int ncols = cplex.getNcols();
+                for(int j = 0 ; j < val.length ; j++){
+                    cplex.output().println("Columns" + j + "value: " + val[j]);
+                    requestCrunch[j].xPast =  val[j];
+                    requestCrunch[j].allocatedBandwidth = requestCrunch[j].allocatedBandwidth - val[j];
+                }
+            }
+              
+            
+            cplex.end();
+            
+            
+       
+        } catch (IloException ex) {
+            Logger.getLogger(JAXB.class.getName()).log(Level.SEVERE, null, ex);
+        }
     
     }
     
@@ -443,7 +654,7 @@ public class JAXB extends TimerTask {
         for(int loop = 0 ; loop < parsing.eventQueue.size() ; loop++){
             Request req =  (Request) parsing.eventQueue.get(loop);
             req.holdingTime = req.holdingTime - 1;
-            System.out.println("Holding Time" + req.holdingTime);
+           // System.out.println("Holding Time" + req.holdingTime);
             if(req.holdingTime <= 0){
                 System.out.println("Removed the element");
                
@@ -453,9 +664,9 @@ public class JAXB extends TimerTask {
                    GraphNode sourceNode = parsing.nodes.node.get(takenPath.get(index));
                    link Link = (link) sourceNode.nodeLink.get(parsing.nodes.node.get(takenPath.get(index+1)));
                    //System.out.println(Link.toString());
-                   System.out.println("Req available badwidth" + Link.availableCapacity);
+                  // System.out.println("Req available badwidth" + Link.availableCapacity);
                    Link.availableCapacity = Link.availableCapacity +  req.allocatedBandwidth ;
-                   System.out.println("Req Allocated Band" + req.allocatedBandwidth + "And avaialble" + Link.availableCapacity);
+                  // System.out.println("Req Allocated Band" + req.allocatedBandwidth + "And avaialble" + Link.availableCapacity);
                    
                    System.out.println(sourceNode);
                    Link.passingRequest.remove(req);

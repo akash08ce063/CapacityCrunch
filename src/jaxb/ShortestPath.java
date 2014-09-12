@@ -95,6 +95,8 @@ public class ShortestPath {
             HashMap previousNode1 = costdijkstra(parse,source,destination,requiredBandwidth,deadLink1);
             if(previousNode1.get(destination) != null){
                 // Block the request
+                
+               // System.out.println("Crunching happed path" + previousNode1);
                 this.crunchingNeeded = true;
                 return previousNode1;
             }else{
@@ -107,6 +109,8 @@ public class ShortestPath {
        }
    
    }
+   
+   
    
    public HashMap costdijkstra(ParseTopology parse,String source,String destination,double requiredBandwidth,HashMap deadLink){
       HashMap<String,Double> distance = new HashMap<String,Double>(); 
@@ -165,12 +169,6 @@ public class ShortestPath {
                
                if(deadLink.get(Link) != null)
                    continue;
-                   
-               
-                
-              //  System.out.println("routing cost" + Link.routingCost);
-               
-               //double distanceThrough = distance.get(currentVertex) + Link.routingCost; 
                 
                 double distanceThrough = distance.get(currentVertex) + 1; 
                 if(distanceThrough < distance.get(neighbourNode.name)){

@@ -17,11 +17,13 @@ public class Request {
     double capacity ;
     // holdingTime should be in the seconds
     int holdingTime;
-    int allocatedBandwidth;
-    int maxBandwidth;
-    int minBandwidth;
+    double allocatedBandwidth;
+    double maxBandwidth;
+    double minBandwidth;
     int crunchCount;
     int crunchingRatio;
+    long startingTime ;
+    double xPast;
     HashMap crunchTime;
     
     
